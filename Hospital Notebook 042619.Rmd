@@ -1,0 +1,63 @@
+---
+title: "Hospital Exploratory Analysis"
+output: html_notebook
+author: Nicole Wright
+---
+
+OAITI has access to all USA Hospital data. The goal of this exploratory analysis is to find intersting questions to ask about the data.  
+
+
+```{r Load Packages}
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(tidycensus)
+```
+
+```{r Read-in Data}
+hospital <- read.csv("C:/Users/Nicole/Desktop/OAITI/Hospital Data/Hospital.csv")
+```
+
+```{r First look}
+View(hospital)
+head(hospital)
+glimpse(hospital)
+```
+
+2010 US Census data, using the tidycensus package ( 1/1/2019).
+Key: 6bfbcee4b4c37a9683ac9c0e1d174d5f0ad67674
+pdf: https://cran.r-project.org/web/packages/tidycensus/tidycensus.pdf
+```{r 2010 Census set up}
+census_api_key("6bfbcee4b4c37a9683ac9c0e1d174d5f0ad67674", install = TRUE, overwrite = TRUE)
+
+# First time, reload your environment so you can use the key without restarting R.
+readRenviron("~/.Renviron")
+```
+
+
+Variables of Interest from Hospital data: Provider.ID, Hospital.Name, City, State, County.Name, Hospital.Type, Hospital.Ownership, Hospital Overall.rating, all comparisons (?)
+
+variables of Interest from census data: by county - population, Income, race, age (?)
+
+Questions:
+How is the frequency of hospitals related to county population, Income, or race?
+Is there any correlation between hospital rating and population, Income, or race?
+
+```{r checking out variables}
+LV1 <- load_variables(2010, "sf1", cache = TRUE) 
+View(LV1)
+VarsC <- c("White" = "P003002", "Black" = "P003003", "Native_American" = "P003004", "Asian" = "P003005", "Pacific_Islander" = "P003006", "Other" = "P003007", "Two_or_more" = "P003008", "Hispanic/Latino" = "P004003")
+
+
+LV2<- load_variables(2010, "acs5", cache = TRUE)
+View(LV2)
+
+```
+
+
+```{r attempt1}
+a1 <- get_decennial(geography = "county", variables = VarsC, summary_var = c(Total_Population = "P001001", Median_Age = "P013001"), year = 2010, geometry = TRUE, cache_table = TRUE, shift_geo = TRUE)
+View(a1)
+
+```
+
