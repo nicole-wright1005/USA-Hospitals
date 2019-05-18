@@ -9,10 +9,13 @@ OAITI has access to all USA Hospital data. The goal of this exploratory analysis
 
 ```{r Load Packages}
 library(ggplot2)
-library(plyr)
+library(dplyr)
 library(tidyverse)
 library(readr)
 library(tidycensus)
+library(tmap)
+library(tmaptools)
+library(sf)
 ```
 
 ```{r Read-in Data}
@@ -83,60 +86,125 @@ Upon examining Median Family Income versus Income per Captia I've noticed that M
 
 ```{r get the data}
 a1 <- get_decennial(geography = "county", variables = VarsC, summary_var = c(Total_Population = "P001001", Median_Age = "P013001"), year = 2010, geometry = TRUE, cache_table = TRUE, shift_geo = TRUE)
-View(a1)
 
 a2 <- get_acs(geography = "county", variables = c("Median Family Income" = "B19113_001"), year = 2010, geometry = TRUE, cache_table = TRUE)
-View(a2)
-
 ```
+
 ```{r Editing a1 and a2 data sets}
-a1 <- a1 %>%
-  rename(c("NAME" ="County", "variable" ="Race", "value" = "Population")) %>%
-  mutate(per_Pop = Population/Total_Population * 100)
+VarsC <- c("White" = "P003002", "Black" = "P003003", "Native_American" = "P003004", "Asian" = "P003005", "Pacific_Islander" = "P003006", "Other" = "P003007", "Two_or_more" = "P003008", "Hispanic/Latino" = "P004003", "Median Age" = "P013001")
 
-State <- unlist(strsplit(a1$County, split = ",")) %>%
-  matrix(ncol = 2, byrow = TRUE) %>% 
-  as.tibble() %>%
-  rename(c("V1" = "County", "V2" = "State"))
+a1 <- get_decennial(geography = "county", variables = VarsC, summary_var = c(Total_Population = "P001001", Median_Age = "P013001"), year = 2010, geometry = TRUE, cache_table = TRUE, shift_geo = TRUE, key = "ab33f4101bd279734ec43e7d7b9a12ace24d8eeb")
 
-a1$State <- State$State
+a1_edit <- a1 %>%
+    rename(County = NAME, Race = variable, Population = value) %>%
+    mutate(per_Pop = Population/Total_Population * 100)
 
+State <- unlist(strsplit(a1_edit$County, split = ", ")) %>%
+    matrix(ncol = 2, byrow = TRUE) %>% 
+    as_tibble() %>%
+    rename(County = V1, State = V2)
 
-a1_final <- a1 %>%
-   select(GEOID, County, State, Median_Age, Race, per_Pop, Total_Population, geometry_census = geometry)
-View(a1_final)
+a1_edit$State <- State$State
+
+a1_final <- a1_edit %>%
+    as_tibble() %>%
+    select(GEOID, County, State, Median_Age, Race, per_Pop, Total_Population, geometry_a1 = geometry)
 
 a2_final <- a2 %>%
   as.tibble() %>%
-  rename(c("NAME" ="County", "estimate" = "Median Family Income")) %>%
-  select(-variable) 
-View(a2_final)
+  rename(Median_Family_Income = estimate, geometry_a2 = geometry) %>%
+  select(-NAME, -variable) 
 ```
 
 
 ```{r Joining a1 and a2 into census data set}
-census <- left_join(a1_final, a2_final, by = "GEOID")
+census <- left_join(a1_final, a2_final, by = "GEOID") %>%
+  
 
-census <- census %>%
-  select(-County.y) 
-census$County <- census$County.x 
 ```
  
 ##Exploratory Analysis
 
 ```{r Explore H data}
-H %>% 
-  group_by(State) %>%
-  tally() %>%
-  plot()
-
 tally <- H %>% 
   group_by(State) %>%
   tally()
 
+plot(tally)
+summary(tally)
+
 tally %>%
   arrange(n) 
-count(tally$State)
+
+sub1 <- census %>%
+  group_by(State) %>%
+  select(Total_Population, Median Family Income, Median_Age)
 ```
-*Turns out there are 5 US territories included here: PR, AS, MP, GU, VI
-* Plot of state hospitals tallied show a pretty even distribution among states with two very high outliers,o TX(405), and CA (339). 
+*Turns out there are 5 US territories included here: PR, AS, MP, GU, VI in the Hospital data
+* Plot of state hospitals tallied show a pretty even distribution among states with two very high outliers,o TX(405), and CA (339). The lowest number of hospital per state makes sense for DE, DC, and RI, these areas have the smallest area.
+* http://beef2live.com/story-ranking-states-area-89-118259, get land mass area (square miles)
+
+```{r US Map plotting}
+#attempt 1
+census_sf <-st_sf(census)
+class(census_sf)
+
+US_map2 <- tm_shape(census_sf) +  tm_polygons("Median_Age", palette = "-Blues", contrast = .7, id = "County", title = "Median Age by County") 
+
+US_map2
+#produces an ok looking map, takes FOREVER to run
+```
+
+*First Focus*
+
+First I will analyze the census data with a focus on Iowa census data. I may add additions variables as analysis continues. I will be using a combination of tmap and ggplot until I decided which package is the best for my use.
+
+
+```{r Iowa subset - tmap}
+#subset by Iowa, determine if load time decreases - use tmap
+census %>%
+  filter(State == "Iowa") %>%
+  st_sf() %>%
+  tm_shape() + 
+  tm_polygons("Median_Age", palette = "-Blues", contrast = .7, 
+              id = "County", title = "Median Age by County")
+
+census_IA <- census %>% 
+  filter(State == "Iowa") %>%
+  rename(geometry = geometry_a1) %>%
+  select(-geometry_a2)
+View(census_IA)
+
+census_IA %>%
+  arrange(desc(Median_Age)) %>%
+  head()
+#Highest median age is 48.1
+```
+
+```{r Iowa subset - ggplot}
+
+ggplot(data = census_IA) +
+  geom_sf(aes(fill = Median_Age))
+```
+
+
+```{r Iowa Median Family Income analysis}
+census_IA$IncomeR <- round(census_IA$Median_Family_Income, -4)
+ggplot(data = census_IA) +
+  geom_sf(aes(fill = factor(IncomeR))) + 
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Iowa Median Family Income by County") + 
+  theme_void()
+#Cannot seem to get rid of grid lines! Tried all manor of panel.grid.etc, setting panel.grid = element_blank() works on other graphs....?
+#Add dollar signs to legend. Do we need legend title?
+#adjust tilt
+census_IA %>% 
+  filter(Median_Family_Income == max(Median_Family_Income) | Median_Family_Income == min(Median_Family_Income))
+
+census_IA %>%
+  mutate(ave = mean(Median_Family_Income), med = median(Median_Family_Income))
+
+```
+
+Examing the Iowa median family income by county we can see the majority of counties make either 50,000 or 60,000 dollars 
+Appanoose County has the lowest median family income at  $41,250 dollars and Dallas county has the largest median family income at 84,018. The average median family income is 58,233.48 and a median income amoung counties of 57,208. The mean and median of median family incomes amount counties in Iowa are close together, which suggests that there is not much skew in the data. 
