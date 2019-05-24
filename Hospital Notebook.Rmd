@@ -118,7 +118,7 @@ a2_final <- a2 %>%
 
 
 ```{r Joining a1 and a2 into census data set}
-census <- left_join(a1_final, a2_final, by = "GEOID") %>%
+census <- left_join(a1_final, a2_final, by = "GEOID")
   
 
 ```
@@ -173,7 +173,6 @@ census_IA <- census %>%
   filter(State == "Iowa") %>%
   rename(geometry = geometry_a1) %>%
   select(-geometry_a2)
-View(census_IA)
 
 census_IA %>%
   arrange(desc(Median_Age)) %>%
@@ -190,12 +189,15 @@ ggplot(data = census_IA) +
 
 ```{r Iowa Median Family Income analysis}
 census_IA$IncomeR <- round(census_IA$Median_Family_Income, -4)
+
 ggplot(data = census_IA) +
   geom_sf(aes(fill = factor(IncomeR))) + 
   scale_fill_brewer(palette = "Set2") +
-  labs(title = "Iowa Median Family Income by County") + 
-  theme_void()
-#Cannot seem to get rid of grid lines! Tried all manor of panel.grid.etc, setting panel.grid = element_blank() works on other graphs....?
+  labs(title = "Iowan Median Family Income") + 
+  coord_sf(datum = NA) + 
+  theme(plot.background = element_rect(color = "white"), legend.title = element_blank()) 
+
+#theme_minimal and theme_void do not get rid of lines... no does specifying 
 #Add dollar signs to legend. Do we need legend title?
 #adjust tilt
 census_IA %>% 
@@ -206,5 +208,40 @@ census_IA %>%
 
 ```
 
-Examing the Iowa median family income by county we can see the majority of counties make either 50,000 or 60,000 dollars 
-Appanoose County has the lowest median family income at  $41,250 dollars and Dallas county has the largest median family income at 84,018. The average median family income is 58,233.48 and a median income amoung counties of 57,208. The mean and median of median family incomes amount counties in Iowa are close together, which suggests that there is not much skew in the data. 
+Examing the Iowa median family income by county we can see the majority of counties make either 50,000 or 60,000 dollars. Appanoose County has the lowest median family income at  $41,250 dollars and Dallas county has the largest median family income at 84,018. The average median family income is 58,233.48 and a median income amoung counties of 57,208. The mean and median of median family incomes amount counties in Iowa are close together, which suggests that there is not much skew in the data. 
+
+```{r Discretize numerical}
+#Using cut_interval
+
+census_IA$Age <- cut_interval(census_IA$Median_Age, n = 4, length = NULL, labels = c("25-30", "30-35", "35-40", ">40"))
+#works like a charm!
+
+```
+
+
+```{r plot discretize Median Age}
+ggplot(data = census_IA) +
+  geom_sf(aes(fill = Age)) + 
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Iowan Median Age") + 
+  coord_sf(datum = NA) + 
+  theme(plot.background = element_rect(color = "white"), legend.title = element_blank())
+
+
+```
+
+```{r plot total population}
+# soltuionsImperfect
+census_IA$Tot_Pop <- cut_interval(census_IA$Total_Population, n = 20, length = NULL
+census_IA$Tot_Pop <- round(census_IA$Total_Population, -4)
+census_IA$Tot_Pop <- log10(census_IA$Total_Population)
+
+
+ggplot(data = census_IA) +
+  geom_sf(aes(fill = factor(Tot_Pop))) + 
+  labs(title = "Iowan population per county") + 
+  coord_sf(datum = NA) + 
+  theme(plot.background = element_rect(color = "white"), legend.title = element_blank())
+
+```
+
