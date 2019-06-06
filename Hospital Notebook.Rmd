@@ -55,6 +55,7 @@ Key: 6bfbcee4b4c37a9683ac9c0e1d174d5f0ad67674
 pdf: https://cran.r-project.org/web/packages/tidycensus/tidycensus.pdf
 ```{r 2010 Census set up}
 census_api_key("6bfbcee4b4c37a9683ac9c0e1d174d5f0ad67674", install = TRUE, overwrite = TRUE)
+key <- "6bfbcee4b4c37a9683ac9c0e1d174d5f0ad67674"
 
 # First time, reload your environment so you can use the key without restarting R.
 readRenviron("~/.Renviron")
@@ -92,6 +93,7 @@ a2 <- get_acs(geography = "county", variables = c("Median Family Income" = "B191
 
 ```{r Editing a1 and a2 data sets}
 VarsC <- c("White" = "P003002", "Black" = "P003003", "Native_American" = "P003004", "Asian" = "P003005", "Pacific_Islander" = "P003006", "Other" = "P003007", "Two_or_more" = "P003008", "Hispanic/Latino" = "P004003", "Median Age" = "P013001")
+#sometimes I need quotes.. sometimes I don't. is it only when I have two characters in the name? 
 
 a1 <- get_decennial(geography = "county", variables = VarsC, summary_var = c(Total_Population = "P001001", Median_Age = "P013001"), year = 2010, geometry = TRUE, cache_table = TRUE, shift_geo = TRUE, key = "ab33f4101bd279734ec43e7d7b9a12ace24d8eeb")
 
@@ -243,5 +245,68 @@ ggplot(data = census_IA) +
   coord_sf(datum = NA) + 
   theme(plot.background = element_rect(color = "white"), legend.title = element_blank())
 
+```
+
+Get more variables to analyze State of Iowa
+Use ACS 2017 5 year
+```{r Examin acs 2017 varibles}
+
+#2017 ACS, industry data for Iowa 
+LV3 <- load_variables(2017, "acs1", cache = TRUE)
+View(LV3)
+LV4 <- load_variables(2017, "acs5", cache = TRUE)
+View(LV4)
+
+Vars3 <- c(Male_farmers_all = "C24010_031", Female_farmers_all = "C24010_067")
+#ACS1 is missing many Iowa counties, only has farming data on small subset of counties
+
+a3 <- get_acs(geography = "county", variables = Vars3, year = 2017, geometry = TRUE, cache_table = TRUE, survey = "acs5")
+
+View(a3)
+```
+
+```{r census_IA data}
+census_IA <- census %>% 
+  filter(State == "Iowa") %>%
+  rename(geometry = geometry_a1) %>%
+  select(-geometry_a2)
+census_IA$IncomeR <- round(census_IA$Median_Family_Income, -4)
+census_IA$Age <- cut_interval(census_IA$Median_Age, n = 4, length = NULL, labels = c("25-30", "30-35", "35-40", ">40"))
+```
+
+
+```{r combine a3 with IA_census data, census_IAf}
+View(census_IA)
+View(a3)
+View(census_IAf)
+
+State2 <- unlist(strsplit(a3$NAME, split = ", ")) %>%
+    matrix(ncol = 2, byrow = TRUE) %>% 
+    as_tibble() %>%
+    rename(County = V1, State = V2)
+a3$State <- State2$State
+
+a3_Ia <- a3  %>%
+    as_tibble() %>%
+    select(GEOID, NAME, State, variable, estimate) %>%
+    filter(State == "Iowa") %>%
+    spread(variable, estimate) %>%
+    mutate(Total_farmers = Male_farmers_all + Female_farmers_all) %>% 
+    select(GEOID, Total_farmers)
+
+View(a3_Ia)
+
+census_IAf <- left_join(census_IA, a3_Ia, by = "GEOID") %>% 
+  mutate(per_Farmer = Total_farmers / Total_Population * 100) 
+```
+Plot census_IAf farmers data
+```{r}
+census_IAf$per_cFarmer <- cut_interval(census_IAf$per_Farmer, n = 5)
+
+ggplot(data = census_IAf) +
+  geom_sf(aes(fill = factor(per_cFarmer))) + 
+  labs(title = "Iowan Farmers") + 
+  coord_sf(datum = NA) + 
+  theme(plot.background = element_rect(color = "white"), legend.title = element_blank())
 ```
 
